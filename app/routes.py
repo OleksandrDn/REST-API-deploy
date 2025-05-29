@@ -16,6 +16,12 @@ async def add_rate_limit_headers(request: Request, response: Response):
         for key, value in request.state.rate_limit_headers.items():
             response.headers[key] = value
 
+async def rate_limit_dependency(
+    request: Request,
+    current_user=Depends(get_current_user)
+):
+    return await authenticated_rate_limit_dependency(request, current_user)
+
 @router.get("/", tags=["base"])
 async def index():
     """Головна сторінка API бібліотеки"""
@@ -29,18 +35,14 @@ async def get_books(
     limit: int = Query(10, ge=1, le=100, description="Максимальна кількість записів для отримання"),
     db=Depends(get_database),
     current_user=Depends(get_current_user),
-    _=Depends(authenticated_rate_limit_dependency)
+    _=Depends(rate_limit_dependency)
 ):
-    """
-    Отримати список книг з пагінацією
-    """
     books_collection = db["books"]
     total = await books_collection.count_documents({})
     cursor = books_collection.find().skip(skip).limit(limit)
     books = [convert_book_from_db(book) async for book in cursor]
     
     await add_rate_limit_headers(request, response)
-    
     return {"data": books, "total": total, "skip": skip, "limit": limit}
 
 @router.post("/books", response_model=List[BookResponse], status_code=201, tags=["books"])
@@ -50,11 +52,8 @@ async def add_books(
     response: Response,
     db=Depends(get_database),
     current_user=Depends(get_current_user),
-    _=Depends(authenticated_rate_limit_dependency)
+    _=Depends(rate_limit_dependency)
 ):
-    """
-    Додати нові книги
-    """
     now = datetime.utcnow()
     books_collection = db["books"]
     
@@ -69,21 +68,17 @@ async def add_books(
     inserted_books = await books_collection.find({"_id": {"$in": result.inserted_ids}}).to_list(length=len(docs))
     
     await add_rate_limit_headers(request, response)
-    
     return [convert_book_from_db(book) for book in inserted_books]
 
 @router.get("/books/{book_id}", response_model=BookResponse, tags=["books"])
 async def get_book(
+    request: Request,
+    response: Response,
     book_id: str = Path(..., description="ID книги"),
-    request: Request = None,
-    response: Response = None,
     db=Depends(get_database),
     current_user=Depends(get_current_user),
-    _=Depends(authenticated_rate_limit_dependency)
+    _=Depends(rate_limit_dependency)
 ):
-    """
-    Отримати книгу за ID
-    """
     if not ObjectId.is_valid(book_id):
         raise HTTPException(status_code=400, detail="Невірний формат ID")
     
@@ -91,24 +86,19 @@ async def get_book(
     if not book:
         raise HTTPException(status_code=404, detail="Книга не знайдена")
     
-    if request and response:
-        await add_rate_limit_headers(request, response)
-    
+    await add_rate_limit_headers(request, response)
     return convert_book_from_db(book)
 
 @router.put("/books/{book_id}", response_model=BookResponse, tags=["books"])
 async def update_book(
+    request: Request,
+    response: Response,
     book_id: str = Path(..., description="ID книги"),
-    payload: BookInput,
-    request: Request = None,
-    response: Response = None,
+    payload: BookInput = ...,
     db=Depends(get_database),
     current_user=Depends(get_current_user),
-    _=Depends(authenticated_rate_limit_dependency)
+    _=Depends(rate_limit_dependency)
 ):
-    """
-    Оновити книгу за ID
-    """
     if not ObjectId.is_valid(book_id):
         raise HTTPException(status_code=400, detail="Невірний формат ID")
     
@@ -122,23 +112,18 @@ async def update_book(
     
     updated = await db["books"].find_one({"_id": ObjectId(book_id)})
     
-    if request and response:
-        await add_rate_limit_headers(request, response)
-    
+    await add_rate_limit_headers(request, response)
     return convert_book_from_db(updated)
 
 @router.delete("/books/{book_id}", status_code=204, tags=["books"])
 async def delete_book(
+    request: Request,
+    response: Response,
     book_id: str = Path(..., description="ID книги"),
-    request: Request = None,
-    response: Response = None,
     db=Depends(get_database),
     current_user=Depends(get_current_user),
-    _=Depends(authenticated_rate_limit_dependency)
+    _=Depends(rate_limit_dependency)
 ):
-    """
-    Видалити книгу за ID
-    """
     if not ObjectId.is_valid(book_id):
         raise HTTPException(status_code=400, detail="Невірний формат ID")
     
@@ -146,13 +131,10 @@ async def delete_book(
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Книга не знайдена")
     
-    if request and response:
-        await add_rate_limit_headers(request, response)
-    
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    await add_rate_limit_headers(request, response)
+    return None
 
 def convert_book_from_db(book) -> BookResponse:
-    """Конвертує документ MongoDB в об'єкт моделі"""
     return BookResponse(
         id=str(book["_id"]),
         title=book["title"],
