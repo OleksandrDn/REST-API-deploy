@@ -28,8 +28,8 @@ async def get_books(
     skip: int = Query(0, ge=0, description="Кількість записів для пропуску"),
     limit: int = Query(10, ge=1, le=100, description="Максимальна кількість записів для отримання"),
     db=Depends(get_database),
-    current_user=Depends(get_current_user),  # Вимагаємо аутентифікації
-    _=Depends(lambda r, u: authenticated_rate_limit_dependency(r, u))  # Rate limiting
+    current_user=Depends(get_current_user),
+    _=Depends(authenticated_rate_limit_dependency)
 ):
     """
     Отримати список книг з пагінацією
@@ -39,7 +39,6 @@ async def get_books(
     cursor = books_collection.find().skip(skip).limit(limit)
     books = [convert_book_from_db(book) async for book in cursor]
     
-    # Додаємо заголовки rate limit
     await add_rate_limit_headers(request, response)
     
     return {"data": books, "total": total, "skip": skip, "limit": limit}
@@ -50,8 +49,8 @@ async def add_books(
     response: Response,
     payload: List[BookInput],
     db=Depends(get_database),
-    current_user=Depends(get_current_user),  # Вимагаємо аутентифікації
-    _=Depends(lambda r, u: authenticated_rate_limit_dependency(r, u))  # Rate limiting
+    current_user=Depends(get_current_user),
+    _=Depends(authenticated_rate_limit_dependency)
 ):
     """
     Додати нові книги
@@ -59,18 +58,16 @@ async def add_books(
     now = datetime.utcnow()
     books_collection = db["books"]
     
-    # Додаємо інформацію про користувача, який додав книги
     docs = [{
         **book.dict(), 
         "created_at": now, 
         "updated_at": None,
-        "created_by": current_user["_id"]  # ID користувача, який додав книгу
+        "created_by": current_user["_id"]
     } for book in payload]
     
     result = await books_collection.insert_many(docs)
     inserted_books = await books_collection.find({"_id": {"$in": result.inserted_ids}}).to_list(length=len(docs))
     
-    # Додаємо заголовки rate limit
     await add_rate_limit_headers(request, response)
     
     return [convert_book_from_db(book) for book in inserted_books]
@@ -81,8 +78,8 @@ async def get_book(
     response: Response,
     book_id: str = Path(..., description="ID книги"),
     db=Depends(get_database),
-    current_user=Depends(get_current_user),  # Вимагаємо аутентифікації
-    _=Depends(lambda r, u: authenticated_rate_limit_dependency(r, u))  # Rate limiting
+    current_user=Depends(get_current_user),
+    _=Depends(authenticated_rate_limit_dependency)
 ):
     """
     Отримати книгу за ID
@@ -94,7 +91,6 @@ async def get_book(
     if not book:
         raise HTTPException(status_code=404, detail="Книга не знайдена")
     
-    # Додаємо заголовки rate limit
     await add_rate_limit_headers(request, response)
     
     return convert_book_from_db(book)
@@ -106,8 +102,8 @@ async def update_book(
     book_id: str = Path(..., description="ID книги"),
     payload: BookInput = ...,
     db=Depends(get_database),
-    current_user=Depends(get_current_user),  # Вимагаємо аутентифікації
-    _=Depends(lambda r, u: authenticated_rate_limit_dependency(r, u))  # Rate limiting
+    current_user=Depends(get_current_user),
+    _=Depends(authenticated_rate_limit_dependency)
 ):
     """
     Оновити книгу за ID
@@ -117,7 +113,7 @@ async def update_book(
     
     update_data = payload.dict()
     update_data["updated_at"] = datetime.utcnow()
-    update_data["updated_by"] = current_user["_id"]  # ID користувача, який оновив книгу
+    update_data["updated_by"] = current_user["_id"]
     
     result = await db["books"].update_one({"_id": ObjectId(book_id)}, {"$set": update_data})
     if result.matched_count == 0:
@@ -125,7 +121,6 @@ async def update_book(
     
     updated = await db["books"].find_one({"_id": ObjectId(book_id)})
     
-    # Додаємо заголовки rate limit
     await add_rate_limit_headers(request, response)
     
     return convert_book_from_db(updated)
@@ -136,8 +131,8 @@ async def delete_book(
     response: Response,
     book_id: str = Path(..., description="ID книги"),
     db=Depends(get_database),
-    current_user=Depends(get_current_user),  # Вимагаємо аутентифікації
-    _=Depends(lambda r, u: authenticated_rate_limit_dependency(r, u))  # Rate limiting
+    current_user=Depends(get_current_user),
+    _=Depends(authenticated_rate_limit_dependency)
 ):
     """
     Видалити книгу за ID
@@ -149,7 +144,6 @@ async def delete_book(
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Книга не знайдена")
     
-    # Додаємо заголовки rate limit
     await add_rate_limit_headers(request, response)
     
     return None
