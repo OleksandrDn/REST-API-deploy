@@ -28,8 +28,8 @@ async def get_books(
     skip: int = Query(0, ge=0, description="Кількість записів для пропуску"),
     limit: int = Query(10, ge=1, le=100, description="Максимальна кількість записів для отримання"),
     db=Depends(get_database),
-    current_user=Depends(get_current_user),  # Вимагаємо аутентифікації
-    _=Depends(lambda r=..., u=...: authenticated_rate_limit_dependency(r, u))  # Rate limiting
+    current_user=Depends(get_current_user),
+    _=Depends(authenticated_rate_limit_dependency)
 ):
     """
     Отримати список книг з пагінацією
@@ -49,8 +49,8 @@ async def add_books(
     request: Request,
     response: Response,
     db=Depends(get_database),
-    current_user=Depends(get_current_user),  # Вимагаємо аутентифікації
-    _=Depends(lambda r=..., u=...: authenticated_rate_limit_dependency(r, u))  # Rate limiting
+    current_user=Depends(get_current_user),
+    _=Depends(authenticated_rate_limit_dependency)
 ):
     """
     Додати нові книги
@@ -62,7 +62,7 @@ async def add_books(
         **book.dict(), 
         "created_at": now, 
         "updated_at": None,
-        "created_by": current_user["_id"]  # ID користувача, який додав книгу
+        "created_by": current_user["_id"]
     } for book in payload]
     
     result = await books_collection.insert_many(docs)
@@ -79,7 +79,7 @@ async def get_book(
     response: Response = None,
     db=Depends(get_database),
     current_user=Depends(get_current_user),
-    _=Depends(lambda r=..., u=...: authenticated_rate_limit_dependency(r, u))
+    _=Depends(authenticated_rate_limit_dependency)
 ):
     """
     Отримати книгу за ID
@@ -99,12 +99,12 @@ async def get_book(
 @router.put("/books/{book_id}", response_model=BookResponse, tags=["books"])
 async def update_book(
     book_id: str = Path(..., description="ID книги"),
-    payload: BookInput = ...,
+    payload: BookInput,
     request: Request = None,
     response: Response = None,
     db=Depends(get_database),
     current_user=Depends(get_current_user),
-    _=Depends(lambda r=..., u=...: authenticated_rate_limit_dependency(r, u))
+    _=Depends(authenticated_rate_limit_dependency)
 ):
     """
     Оновити книгу за ID
@@ -134,7 +134,7 @@ async def delete_book(
     response: Response = None,
     db=Depends(get_database),
     current_user=Depends(get_current_user),
-    _=Depends(lambda r=..., u=...: authenticated_rate_limit_dependency(r, u))
+    _=Depends(authenticated_rate_limit_dependency)
 ):
     """
     Видалити книгу за ID
